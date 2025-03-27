@@ -8,7 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import ElementClickInterceptedException
 from selenium.webdriver.common.keys import Keys
 
 class WebAccess:
@@ -190,9 +190,19 @@ class WebAccess:
             if OUTPUT_FILE:
                 self.logger.info(f'✅ Đã lưu file {OUTPUT_FILE}')
             return df
+        except ElementClickInterceptedException as e:
+            return self.get_information(
+                ビルダー名=ビルダー名,
+                図面=図面,
+                確定納品日=確定納品日,
+                リセット=リセット,
+                FIELDS=FIELDS,
+                OUTPUT_FILE=OUTPUT_FILE
+            )
         except Exception as e:
-            self.logger.error(e)
+            self.logger.info(e.msg.split("(Session info")[0].strip())
             return None
+            
       
           
 __all__ = [WebAccess]
