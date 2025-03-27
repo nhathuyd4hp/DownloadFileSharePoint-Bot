@@ -6,7 +6,7 @@ from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 class SharePoint:
     def __init__(
         self,
@@ -134,12 +134,13 @@ class SharePoint:
             self.logger.error(e)
             return False
         
-    def download_file(self,site_url:list[str],file_pattern:str,retry:int=3) -> list[tuple[bool,str]]:
+    def download_file(self,site_url:list[str],file_pattern:str) -> list[tuple[bool,list]]:
         result = []
-        for url in site_url:
+        download_file = []
+        for site in site_url:
             try:
                 time.sleep(0.5)
-                self.browser.get(url)
+                self.browser.get(site)
                 self.wait.until(
                     lambda driver: driver.execute_script("return document.readyState") == "complete"
                 )
@@ -184,7 +185,7 @@ class SharePoint:
                                 button = name_gridcell.find_element(By.TAG_NAME,'button')
                                 if button.text == folder:
                                     button.click()
-                                    time.sleep(5)
+                                    time.sleep(5) # Có thể tối ưu ở đây
                                     break
                     except TimeoutException:
                         rows = self.browser.find_elements(
@@ -232,11 +233,13 @@ class SharePoint:
                             )
                             button = name_gridcell.find_element(By.TAG_NAME,'button')
                             display_name = button.text
+                            download_file.append(display_name)
                             # Nếu display_name match với file là được
                             if pattern.match(display_name):
                                 gridcell_div = row.find_element(By.XPATH, "./preceding-sibling::div[@role='gridcell']")
                                 checkbox = gridcell_div.find_element(By.CSS_SELECTOR, "div[role='checkbox']")
                                 if checkbox.get_attribute('aria-checked') == "false": 
+                                    time.sleep(1)
                                     checkbox.click()                  
                 except TimeoutException:
                     rows = self.browser.find_elements(
@@ -256,10 +259,13 @@ class SharePoint:
                                 "div[role='gridcell'][data-automationid='field-LinkFilename']"
                             )
                             span_name_gridcell = name_gridcell.find_element(By.TAG_NAME,'span')
+                            download_file.append(span_name_gridcell.text)
                             if pattern.match(span_name_gridcell.text):
                                 if row.find_elements(By.CSS_SELECTOR,"div[class^='rowSelectionCell_']"):
+                                    time.sleep(1)
                                     row.find_element(By.CSS_SELECTOR,"div[class^='rowSelectionCell_']").click()
                 # Download
+                time.sleep(2)
                 try:
                     self.wait.until(
                         EC.presence_of_element_located((By.XPATH, "//span[text()='Download']"))
@@ -280,12 +286,17 @@ class SharePoint:
                     self.wait.until(
                         EC.presence_of_element_located((By.CSS_SELECTOR, "button[name='Download']"))
                     ).click()
-                time.sleep(1)
-                self.logger.info(f"Download {url} thành công")
-                result.append(tuple(True,None))
+                time.sleep(5)
+                self.logger.info(f"Tải bản vẽ {site} thành công")
+                result.append((True,download_file))
+                continue
+            except StaleElementReferenceException as e:
+                self.logger.info(f"Thử tải lại bản vẽ {site}")
+                site_url.insert(0,site)
             except Exception as e:
-                self.logger.info(f"Download {url} thất bại: {e.split("(Session info")[0].strip()}")
-                result.append(tuple(False,e))
+                self.logger.info(f"Tải bản vẽ {site} thất bại: {e.msg.split("(Session info")[0].strip()}")
+                result.append((False,e))
+                continue
         time.sleep(30)
         return result
             
