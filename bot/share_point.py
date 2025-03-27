@@ -134,70 +134,131 @@ class SharePoint:
             self.logger.error(e)
             return False
         
-    def download_file(self,site_url:list[str],file_pattern:str) -> bool: 
+    def download_file(self,site_url:list[str],file_pattern:str,retry:int=3) -> list[tuple[bool,str]]:
         result = []
         for url in site_url:
             try:
                 time.sleep(0.5)
                 self.browser.get(url)
-                time.sleep(2.5)
+                self.wait.until(
+                    lambda driver: driver.execute_script("return document.readyState") == "complete"
+                )
+                # Access Denied
+                try:
+                    ms_error_header = self.wait.until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "div#ms-error-header h1"))
+                    )
+                    if ms_error_header.text == 'Access Denied':
+                        SignInWithTheAccount = self.wait.until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "div#ms-error a"))
+                        )  
+                        SignInWithTheAccount.click()
+                    else:
+                        result.append(tuple(False,None))
+                        continue
+                except TimeoutException:
+                    pass
                 # -- Folder --
                 folders = file_pattern.split("/")[:-1]
                 for folder in folders:
-                    # Found folder
+                    # Lấy tất cả các dòng
+                    rows = []
+                    try:
+                        ms_DetailsList_contentWrapper = self.wait.until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='ms-DetailsList-contentWrapper']"))
+                        )
+                        rows = ms_DetailsList_contentWrapper.find_elements(
+                            by = By.CSS_SELECTOR,
+                            value = "div[class^='ms-DetailsRow-fields fields-']"
+                        )
+                        for row in rows:
+                            icon_gridcell = row.find_element(
+                                By.CSS_SELECTOR, 
+                                "div[role='gridcell'][data-automationid='DetailsRowCell']"
+                            )
+                            if icon_gridcell.find_elements(By.TAG_NAME, "svg"): # Folder
+                                name_gridcell = row.find_element(
+                                By.CSS_SELECTOR, 
+                                "div[role='gridcell'][data-automation-key^='displayNameColumn_']"
+                                )
+                                button = name_gridcell.find_element(By.TAG_NAME,'button')
+                                if button.text == folder:
+                                    button.click()
+                                    time.sleep(5)
+                                    break
+                    except TimeoutException:
+                        rows = self.browser.find_elements(
+                            By.CSS_SELECTOR,
+                            "div[id^='virtualized-list_'][id*='_page-0_']"
+                        )
+                        for row in rows:
+                            icon_gridcell = row.find_element(
+                                By.CSS_SELECTOR, 
+                                "div[role='gridcell'][data-automationid='field-DocIcon']"
+                            )
+                            name_gridcell = row.find_element(
+                                By.CSS_SELECTOR, 
+                                "div[role='gridcell'][data-automationid='field-LinkFilename']"
+                            )
+                            if icon_gridcell.find_elements(By.TAG_NAME, "svg"): # Folder
+                                span = name_gridcell.find_element(By.TAG_NAME,'span')
+                                if span.text == folder:
+                                    span.click()
+                                    time.sleep(5)
+                                    break
+                # -- File --
+                pattern = file_pattern.split("/")[-1]
+                pattern = re.compile(pattern)
+                try:
                     ms_DetailsList_contentWrapper = self.wait.until(
                         EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='ms-DetailsList-contentWrapper']"))
-                    )
+                    )       
                     rows = ms_DetailsList_contentWrapper.find_elements(
                         by = By.CSS_SELECTOR,
                         value = "div[class^='ms-DetailsRow-fields fields-']"
-                    ) # Lấy tất cả các dòng 
+                    )
+                    # Lấy tất cả các dòng                
                     for row in rows:
                         icon_gridcell = row.find_element(
                             By.CSS_SELECTOR, 
                             "div[role='gridcell'][data-automationid='DetailsRowCell']"
                         )
                         if icon_gridcell.find_elements(By.TAG_NAME, "svg"): # Folder
+                            continue
+                        else:
                             name_gridcell = row.find_element(
-                            By.CSS_SELECTOR, 
-                            "div[role='gridcell'][data-automation-key^='displayNameColumn_']"
+                                By.CSS_SELECTOR, 
+                                "div[role='gridcell'][data-automation-key^='displayNameColumn_']"
                             )
                             button = name_gridcell.find_element(By.TAG_NAME,'button')
-                            if button.text == folder:
-                                button.click()
-                                time.sleep(5)
-                                break
-                            
-                # -- File --
-                pattern = file_pattern.split("/")[-1]
-                pattern = re.compile(pattern)
-                ms_DetailsList_contentWrapper = self.wait.until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='ms-DetailsList-contentWrapper']"))
-                )       
-                rows = ms_DetailsList_contentWrapper.find_elements(
-                    by = By.CSS_SELECTOR,
-                    value = "div[class^='ms-DetailsRow-fields fields-']"
-                ) # Lấy tất cả các dòng  
-                for row in rows:
-                    icon_gridcell = row.find_element(
-                        By.CSS_SELECTOR, 
-                        "div[role='gridcell'][data-automationid='DetailsRowCell']"
+                            display_name = button.text
+                            # Nếu display_name match với file là được
+                            if pattern.match(display_name):
+                                gridcell_div = row.find_element(By.XPATH, "./preceding-sibling::div[@role='gridcell']")
+                                checkbox = gridcell_div.find_element(By.CSS_SELECTOR, "div[role='checkbox']")
+                                if checkbox.get_attribute('aria-checked') == "false": 
+                                    checkbox.click()                  
+                except TimeoutException:
+                    rows = self.browser.find_elements(
+                        By.CSS_SELECTOR,
+                        "div[id^='virtualized-list_'][id*='_page-0_']"
                     )
-                    if icon_gridcell.find_elements(By.TAG_NAME, "svg"): # Folder
-                        continue
-                    else:
-                        name_gridcell = row.find_element(
+                    for row in rows:
+                        icon_gridcell = row.find_element(
                             By.CSS_SELECTOR, 
-                            "div[role='gridcell'][data-automation-key^='displayNameColumn_']"
+                            "div[role='gridcell'][data-automationid='field-DocIcon']"
                         )
-                        button = name_gridcell.find_element(By.TAG_NAME,'button')
-                        display_name = button.text
-                        # Nếu display_name match với file là được
-                        if pattern.match(display_name):
-                            gridcell_div = row.find_element(By.XPATH, "./preceding-sibling::div[@role='gridcell']")
-                            checkbox = gridcell_div.find_element(By.CSS_SELECTOR, "div[role='checkbox']")
-                            if checkbox.get_attribute('aria-checked') == "false": 
-                                checkbox.click()
+                        if icon_gridcell.find_elements(By.TAG_NAME, "svg"): # Folder
+                            continue
+                        else:
+                            name_gridcell = row.find_element(
+                                By.CSS_SELECTOR, 
+                                "div[role='gridcell'][data-automationid='field-LinkFilename']"
+                            )
+                            span_name_gridcell = name_gridcell.find_element(By.TAG_NAME,'span')
+                            if pattern.match(span_name_gridcell.text):
+                                if row.find_elements(By.CSS_SELECTOR,"div[class^='rowSelectionCell_']"):
+                                    row.find_element(By.CSS_SELECTOR,"div[class^='rowSelectionCell_']").click()
                 # Download
                 try:
                     self.wait.until(
@@ -219,12 +280,13 @@ class SharePoint:
                     self.wait.until(
                         EC.presence_of_element_located((By.CSS_SELECTOR, "button[name='Download']"))
                     ).click()
-                time.sleep(0.5)
-                result.append(True)
+                time.sleep(1)
+                self.logger.info(f"Download {url} thành công")
+                result.append(tuple(True,None))
             except Exception as e:
-                self.logger.error(e)
-                result.append(False)
-        time.sleep(10)
+                self.logger.info(f"Download {url} thất bại: {e.split("(Session info")[0].strip()}")
+                result.append(tuple(False,e))
+        time.sleep(30)
         return result
             
 
