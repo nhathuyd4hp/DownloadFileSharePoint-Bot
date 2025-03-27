@@ -233,13 +233,13 @@ class SharePoint:
                             )
                             button = name_gridcell.find_element(By.TAG_NAME,'button')
                             display_name = button.text
-                            download_file.append(display_name)
                             # Nếu display_name match với file là được
                             if pattern.match(display_name):
                                 gridcell_div = row.find_element(By.XPATH, "./preceding-sibling::div[@role='gridcell']")
                                 checkbox = gridcell_div.find_element(By.CSS_SELECTOR, "div[role='checkbox']")
                                 if checkbox.get_attribute('aria-checked') == "false": 
                                     time.sleep(1)
+                                    download_file.append(display_name)
                                     checkbox.click()                  
                 except TimeoutException:
                     rows = self.browser.find_elements(
@@ -259,10 +259,10 @@ class SharePoint:
                                 "div[role='gridcell'][data-automationid='field-LinkFilename']"
                             )
                             span_name_gridcell = name_gridcell.find_element(By.TAG_NAME,'span')
-                            download_file.append(span_name_gridcell.text)
                             if pattern.match(span_name_gridcell.text):
                                 if row.find_elements(By.CSS_SELECTOR,"div[class^='rowSelectionCell_']"):
                                     time.sleep(1)
+                                    download_file.append(span_name_gridcell.text)
                                     row.find_element(By.CSS_SELECTOR,"div[class^='rowSelectionCell_']").click()
                 # Download
                 time.sleep(2)
@@ -286,7 +286,7 @@ class SharePoint:
                     self.wait.until(
                         EC.presence_of_element_located((By.CSS_SELECTOR, "button[name='Download']"))
                     ).click()
-                time.sleep(5)
+                time.sleep(2)
                 self.logger.info(f"Tải bản vẽ {site} thành công")
                 result.append((True,download_file))
                 continue

@@ -5,6 +5,7 @@ import pandas as pd
 from pathlib import Path
 from datetime import date
 from selenium import webdriver
+from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
@@ -49,6 +50,9 @@ class WebAccess:
         # Trạng thái đăng nhập
         self.authenticated = self.__authentication(username, password)
         
+    def __del__(self):
+        if hasattr(self,'browser') and isinstance(self.browser,WebDriver):
+            self.browser.quit()    
        
     def __authentication(self,username:str,password:str) -> bool:
         try:
